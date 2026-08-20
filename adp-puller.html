@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynasty ADP Puller</title>
+<style>
+  body{background:#05091D;color:#EDEFEA;font-family:'Segoe UI',Arial,sans-serif;padding:24px;max-width:700px;margin:0 auto;}
+  h1{font-size:18px;}
+  p{color:#7C86AE;font-size:13px;line-height:1.5;}
+  button{background:#1FD8C4;color:#052420;border:none;padding:10px 20px;font-weight:700;border-radius:3px;cursor:pointer;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;}
+  button:disabled{background:#14a396;cursor:default;}
+  #log{font-family:Consolas,monospace;font-size:12px;color:#7C86AE;margin-top:16px;white-space:pre-wrap;background:#0E1433;padding:12px;border-radius:3px;max-height:300px;overflow-y:auto;}
+  #downloadBtn{display:none;margin-top:16px;}
+</style>
+</head>
+<body>
+<h1>Dynasty ADP Puller — one-time historical export</h1>
+<p>Pulls Dynasty ADP (12-team, all positions) from Fantasy Football Calculator's public API for every year from 2010 through 2026, including the consensus spread (min/max pick) and selection percentage for each player. Runs from your browser since this domain isn't reachable from Claude's sandbox. When it finishes, click the download button and send that file back to Claude.</p>
+<button id="pullBtn">Pull ADP History</button>
+<button id="downloadBtn">Download Results</button>
+<div id="log"></div>
+
+<script>
+const startYear = 2010, endYear = 2026;
+let results = [];
+
+function log(msg){
+  const el = document.getElementById('log');
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+document.getElementById('pullBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('pullBtn');
+  btn.disabled = true;
+  results = [];
+  log(`Starting pull: ${startYear}-${endYear}, Dynasty, 12-team...`);
+
+  for(let year = startYear; year <= endYear; year++){
+    try{
+      const url = `https://fantasyfootballcalculator.com/api/v1/adp/dynasty?teams=12&year=${year}&position=all`;
+      const res = await fetch(url);
+      if(!res.ok){
+        log(`  ${year}: HTTP ${res.status}, skipping`);
+        continue;
+      }
+      const data = await res.json();
+      // First year only: dump the raw structure so we can verify/fix field names if needed
+      if(year === startYear){
+        log(`  [debug] raw response keys: ${Object.keys(data).join(', ')}`);
+        const firstPlayerArray = data.players || data;
+        if(Array.isArray(firstPlayerArray) && firstPlayerArray.length){
+          log(`  [debug] first player object: ${JSON.stringify(firstPlayerArray[0])}`);
+        }
+      }
+      const playerArray = data.players || (Array.isArray(data) ? data : []);
+      const players = playerArray.map(p => ({
+        year: year,
+        ffc_id: p.id,
+        name: p.name,
+        position: p.position,
+        team: p.team,
+        adp: p.averagePick,
+        min_pick: p.minPick,
+        max_pick: p.maxPick,
+        draft_pct: p.draftSelPct
+      }));
+      results = results.concat(players);
+      log(`  ${year}: ${players.length} players`);
+    }catch(e){
+      log(`  ${year}: FAILED - ${e.message}`);
+    }
+    await sleep(400); // be polite to their API, per their ToS request
+  }
+
+  log(`\nDone. ${results.length} total player-year rows.`);
+  document.getElementById('downloadBtn').style.display = 'inline-block';
+  btn.disabled = false;
+});
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(results, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dynasty_adp_history.json';
+  a.click();
+});
+</script>
+</body>
+</html>
