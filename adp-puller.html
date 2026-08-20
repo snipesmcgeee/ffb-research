@@ -40,7 +40,8 @@ document.getElementById('pullBtn').addEventListener('click', async () => {
 
   for(let year = startYear; year <= endYear; year++){
     try{
-      const url = `https://fantasyfootballcalculator.com/api/v1/adp/dynasty?teams=12&year=${year}&position=all`;
+      const targetUrl = `https://fantasyfootballcalculator.com/api/v1/adp/dynasty?teams=12&year=${year}&position=all`;
+      const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
       const res = await fetch(url);
       if(!res.ok){
         log(`  ${year}: HTTP ${res.status}, skipping`);
