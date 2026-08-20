@@ -42,12 +42,29 @@ document.getElementById('pullBtn').addEventListener('click', async () => {
     try{
       const targetUrl = `https://fantasyfootballcalculator.com/api/v1/adp/dynasty?teams=12&year=${year}&position=all`;
       const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-      const res = await fetch(url);
-      if(!res.ok){
-        log(`  ${year}: HTTP ${res.status}, skipping`);
+
+      let data = null, lastErr = null;
+      for(let attempt = 1; attempt <= 3; attempt++){
+        try{
+          const res = await fetch(url);
+          if(!res.ok) throw new Error(`HTTP ${res.status}`);
+          data = await res.json();
+          break;
+        }catch(e){
+          lastErr = e;
+          if(attempt < 3) await sleep(1500 * attempt); // backoff: 1.5s, 3s
+        }
+      }
+      if(!data){
+        log(`  ${year}: FAILED after 3 attempts - ${lastErr.message}`);
+        await sleep(700);
         continue;
       }
-      const data = await res.json();
+      if(data.errors){
+        log(`  ${year}: no data available (${JSON.stringify(data.errors)})`);
+        await sleep(700);
+        continue;
+      }
       // First year only: dump the raw structure so we can verify/fix field names if needed
       if(year === startYear){
         log(`  [debug] raw response keys: ${Object.keys(data).join(', ')}`);
