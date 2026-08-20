@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>College Production Stats Puller</title>
+<style>
+  body{background:#05091D;color:#EDEFEA;font-family:'Segoe UI',Arial,sans-serif;padding:24px;max-width:700px;margin:0 auto;}
+  h1{font-size:18px;}
+  p{color:#7C86AE;font-size:13px;line-height:1.5;}
+  input{background:#0E1433;border:1px solid #232B52;color:#EDEFEA;padding:8px 10px;border-radius:3px;font-family:Consolas,monospace;font-size:13px;width:100%;max-width:400px;margin-bottom:10px;}
+  button{background:#1FD8C4;color:#052420;border:none;padding:10px 20px;font-weight:700;border-radius:3px;cursor:pointer;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;}
+  button:disabled{background:#14a396;cursor:default;}
+  #log{font-family:Consolas,monospace;font-size:12px;color:#7C86AE;margin-top:16px;white-space:pre-wrap;background:#0E1433;padding:12px;border-radius:3px;max-height:350px;overflow-y:auto;}
+  #callCount{color:#1FD8C4;font-weight:700;}
+  #downloadBtn{display:none;margin-top:16px;}
+</style>
+</head>
+<body>
+<h1>College Production Stats Puller</h1>
+<p>Your API key is never saved anywhere — it's only used in your browser for this session, and this page can be safely hosted on GitHub since the key isn't part of the file. Pulls season-level player stats (2000-2026) to compute target share, yard share, and TD share per player.</p>
+<p>Free-tier quota: 1,000 calls/month. Calls used this run: <span id="callCount">0</span></p>
+<input type="password" id="apiKey" placeholder="Paste your CollegeFootballData API key here">
+<br>
+<button id="pullBtn">Pull College Stats</button>
+<button id="downloadBtn">Download Results</button>
+<div id="log"></div>
+
+<script>
+const startYear = 2000, endYear = 2026;
+let results = { player_stats: [], team_stats: [] };
+let callCount = 0;
+
+function log(msg){
+  const el = document.getElementById('log');
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+function bumpCalls(){
+  callCount++;
+  document.getElementById('callCount').textContent = callCount;
+}
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+async function cfbdFetch(path, key){
+  const res = await fetch(`https://api.collegefootballdata.com${path}`, {
+    headers: { 'Authorization': `Bearer ${key}`, 'Accept': 'application/json' }
+  });
+  bumpCalls();
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+document.getElementById('pullBtn').addEventListener('click', async () => {
+  const key = document.getElementById('apiKey').value.trim();
+  if(!key){ log('Enter your API key first.'); return; }
+  const btn = document.getElementById('pullBtn');
+  btn.disabled = true;
+  results = { player_stats: [], team_stats: [] };
+  log(`Starting pull: ${startYear}-${endYear}...`);
+
+  for(let year = startYear; year <= endYear; year++){
+    try{
+      const playerData = await cfbdFetch(`/stats/player/season?year=${year}`, key);
+      if(year === startYear){
+        log(`  [debug] player_stats sample: ${JSON.stringify(playerData[0])}`);
+      }
+      results.player_stats = results.player_stats.concat(
+        (playerData || []).map(p => ({...p, year}))
+      );
+
+      const teamData = await cfbdFetch(`/stats/season?year=${year}`, key);
+      if(year === startYear){
+        log(`  [debug] team_stats sample: ${JSON.stringify(teamData[0])}`);
+      }
+      results.team_stats = results.team_stats.concat(
+        (teamData || []).map(t => ({...t, year}))
+      );
+
+      log(`  ${year}: ${playerData.length} player rows, ${teamData.length} team rows (${callCount} calls so far)`);
+    }catch(e){
+      log(`  ${year}: FAILED - ${e.message}`);
+    }
+    if(callCount > 900){
+      log('\nApproaching the 1000/month quota — stopping early to be safe.');
+      break;
+    }
+    await sleep(300);
+  }
+
+  log(`\nDone. ${callCount} total calls used. ${results.player_stats.length} player rows, ${results.team_stats.length} team rows.`);
+  document.getElementById('downloadBtn').style.display = 'inline-block';
+  btn.disabled = false;
+});
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(results, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'college_stats_history.json';
+  a.click();
+});
+</script>
+</body>
+</html>
