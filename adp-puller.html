@@ -65,26 +65,18 @@ document.getElementById('pullBtn').addEventListener('click', async () => {
         await sleep(700);
         continue;
       }
-      // First year only: dump the raw structure so we can verify/fix field names if needed
-      if(year === startYear){
+      // Don't guess field names here — export the raw object as-is and map fields
+      // server-side where the actual structure can be inspected directly.
+      if(!window._adpDebugLogged){
+        window._adpDebugLogged = true;
         log(`  [debug] raw response keys: ${Object.keys(data).join(', ')}`);
-        const firstPlayerArray = data.players || data;
-        if(Array.isArray(firstPlayerArray) && firstPlayerArray.length){
+        const firstPlayerArray = data.players || (Array.isArray(data) ? data : []);
+        if(firstPlayerArray.length){
           log(`  [debug] first player object: ${JSON.stringify(firstPlayerArray[0])}`);
         }
       }
       const playerArray = data.players || (Array.isArray(data) ? data : []);
-      const players = playerArray.map(p => ({
-        year: year,
-        ffc_id: p.id,
-        name: p.name,
-        position: p.position,
-        team: p.team,
-        adp: p.averagePick,
-        min_pick: p.minPick,
-        max_pick: p.maxPick,
-        draft_pct: p.draftSelPct
-      }));
+      const players = playerArray.map(p => ({...p, year}));
       results = results.concat(players);
       log(`  ${year}: ${players.length} players`);
     }catch(e){
